@@ -1,3 +1,4 @@
+# media_controller.py
 import asyncio
 from pathlib import Path
 import time
@@ -99,12 +100,6 @@ class MediaController:
         if str(file_path) in self.processed_files:
             self.logger.debug(f"File {file_path} has already been processed, skipping.")
             return
-
-        if (
-            self.config.workflow.images.move_processed_media
-            or self.config.workflow.videos.move_processed_media
-        ) and not self.config.processing.simulate_processing:
-            file_path = await self.file_manager.organize_file(file_path, media_type)
 
         await self.task_runner.add_task(
             lambda: self._process_media(file_path, media_type)

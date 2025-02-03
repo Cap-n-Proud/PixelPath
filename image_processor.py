@@ -81,24 +81,28 @@ class ImageProcessor:
         # Start timing
         timer.start()
         results = {}
+        self.logger.info("-------------------------------------------------")
         self.logger.info("Started processing image %s", image_path)
 
         try:
             # Core processing steps
             if self.config.workflow.images.enable_tagging:
+                self.logger.info(f"Generating tags (enable_tagging)")
                 results["tags"] = await self._get_image_tags(image_path)
                 self.logger.debug(f"Tags: {results['tags']}")
 
             if self.config.workflow.images.enable_geotagging:
+                self.logger.info(f"Reverse geotagging (enable_geotagging)")
                 results["geotag"] = await self._process_geotagging(image_path)
-
                 self.logger.debug(f"Geotag: {results['geotag']}")
 
             if self.config.workflow.images.enable_description:
+                self.logger.info(f"Creating a description (enable_description)")
                 results["description"] = await self._process_description(image_path)
                 self.logger.debug(f"Description: {results['description']}")
 
             if self.config.workflow.images.enable_color_analysis:
+                self.logger.info(f"Analyzing colors (enable_color_analysis)")
                 results["colors"] = await self._process_analyze_colors(image_path)
                 self.logger.debug(f"Dominat colors: {results['colors']}")
 
@@ -106,6 +110,7 @@ class ImageProcessor:
             #     results["objects"] = await self._detect_objects(image_path)
 
             if self.config.workflow.images.enable_face_recognition:
+                self.logger.info(f"Recognizing faces (enable_face_recognition)")
                 results["faces"] = await self._classify_faces(image_path)
                 self.logger.debug(f"Faces: {results['faces']}")
 
@@ -113,13 +118,23 @@ class ImageProcessor:
             #     results["caption"] = await self._generate_caption(image_path)
 
             if self.config.workflow.images.enable_ocr:
+                self.logger.info(f"Performing OCR (enable_ocr)")
                 results["ocr"] = await self._process_ocr(image_path)
                 self.logger.info(f"OCR: {results['ocr']}")
 
             # Write metadata
             if self.config.workflow.images.write_metadata and len(results):
+                self.logger.info(f"Writing metafata (write_metadata)")
                 await self.metadata.write_metadata(image_path, results, "image")
             self.logger.info(f"Resuts: {results}")
+            if (
+                self.config.workflow.images.move_processed_media
+                or self.config.workflow.videos.move_processed_media
+            ) and not self.config.processing.simulate_processing:
+                self.logger.info(f"Moving file (move_processed_media)")
+                destination = await self.file_manager.organize_file(image_path)
+                self.logger.info(f"File moved to: '{destination}'")
+
         except Exception as e:
             self.logger.error(f"Image processing failed for {image_path}: {str(e)}")
             return {}
@@ -485,10 +500,10 @@ class ImageProcessor:
         if not gps_data:
             self.logger.warning("No GPS data found for image %s", image_path)
 
-            return []
+            return {}
         endpoint = f"{self.config.api.reverse_geo_url}{gps_data.get('lat')},{gps_data.get('lon')}&key={self.config.api.REVERSE_GEO_API_KEY}"
         try:
-            response = await self.api.post_request(endpoint, {})
+            response = await self.api.get_request(endpoint, {})
             # Extracting relevant information
             geolocation = response["results"][0]["components"]
             # print(geolocation)
@@ -502,3 +517,66 @@ class ImageProcessor:
         except Exception as e:
             self.logger.error(f"Geotagging failed: {str(e)}")
             return []
+
+    async def map_ranking(self, original_rank):
+        # Inverting the original rank as 1 is great and 100 is bad
+        inverted_rank = 101 - original_rank
+
+        # Mapping the inverted rank to the range [1, 5]
+        # Since inverted_rank is in [1, 100], we divide it by 20 to get it in the range [1, 5]
+        mapped_rank = inverted_rank / 20
+
+        # Rounding to the nearest integer to get a rank between 1 and 5
+        final_rank = round(mapped_rank)
+
+        # Ensuring that the final rank is within the bounds [1, 5]
+        final_rank = max(1, min(final_rank, 5))
+
+        return final_rank
+
+    async def generate_rating(self, fname):
+        # Call the get_rating function for the image
+        mapped = ""
+        hu_r = await self.exif_rating(str(fname))
+        if hu_r == 0 or fm_config.OVERWRITE_RATING:
+            # and not fm_config.OVERWRITE_RANK:
+            ai_r = await self.get_rating(str(fname))
+            if ai_r > 0:
+                mapped = int(await self.map_ranking(ai_r))
+            try:
+                await self.set_rating(mapped, fname)
+                self.logger.debug(
+                    f"|generate_rating| {fname}, {ai_r}, {hu_r}, {mapped}"
+                )
+            except Exception as e:
+                self.logger.error(f"|generate_rating|  {e}")
+        return mapped
+
+    async def get_rating(self, fname):
+        output_value = 0
+        # Define the payload
+        payload = {"input": {"input_image": fm_config.IMAGES_SERVER_URL + fname}}
+        # Make the POST request
+        response = requests.post(
+            fm_config.IMAGE_RATING_URL,
+            headers=fm_config.IMAGE_RATING_HEADERS,
+            data=json.dumps(payload),
+        )
+
+        # Check the response
+        if response.status_code == 200:
+            data = response.json()
+
+            # Check if the 'status' key is 'succeeded'
+            if data.get("status") == "succeeded":
+                output_value = data.get("output")
+                # print("Success: The output value is", output_value)
+            else:
+                self.logger.error(
+                    f"|get_rating| The task did not succeed. Status:  {data.get('status')}"
+                )
+        else:
+            self.logger.error(
+                f"|get_rating|  HTTP Response Code {response.status_code}, {response.text}"
+            )
+        return output_value

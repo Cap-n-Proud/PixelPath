@@ -6,6 +6,8 @@ import logging
 from typing import Set
 from datetime import datetime  # Correct import for datetime
 import cv2
+import subprocess
+import json
 
 
 class FileManager:
@@ -14,7 +16,72 @@ class FileManager:
         self.logger = logging.getLogger(__name__)
         self.processed_files: Set[str] = set()
 
-    async def organize_file(self, file_path: Path, media_type: str) -> Path:
+    async def organize_file(self, path):
+        baseDest = self.config.paths.image_dest
+        # Get the file's creation and modification times
+        path = str(path)
+        if path.lower().endswith(self.config.image_extensions):
+            metadata_cmd = ["exiftool", "-json", path]
+            metadata = json.loads(subprocess.check_output(metadata_cmd))
+            created_time = metadata[0].get("DateTimeOriginal")
+        elif path.lower().endswith(self.config.video_extensions):
+            metadata_cmd = [
+                "ffprobe",
+                "-v",
+                "quiet",
+                "-print_format",
+                "json",
+                "-show_format",
+                "-show_streams",
+                path,
+            ]
+            metadata = json.loads(subprocess.check_output(metadata_cmd))
+            created_time = metadata["format"]["tags"].get("creation_time")
+        else:
+            created_time = os.path.getctime(path)
+
+        if created_time:
+            # Remove milliseconds from timestamp string
+            if isinstance(created_time, float):
+                timestamp_str = datetime.fromtimestamp(created_time).strftime(
+                    "%Y:%m:%d %H:%M:%S"
+                )
+            else:
+                timestamp_str = created_time.split(".")[0]
+            formats = ["%Y:%m:%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"]
+            for format_str in formats:
+                try:
+                    file_time = datetime.strptime(timestamp_str, format_str).timestamp()
+                    break
+                except ValueError:
+                    pass
+        else:
+            # None of the formats matched, use modification time as fallback
+            file_time = os.path.getmtime(path)
+
+        # Convert the file time to a datetime object
+        file_date = datetime.fromtimestamp(file_time)
+
+        # Create the folder path using the year and month of the file date
+        folder_path = os.path.join(
+            str(baseDest), str(file_date.year), str(file_date.month).zfill(2)
+        )
+
+        # Create the folder if it doesn't exist
+        os.makedirs(folder_path, exist_ok=True)
+
+        # Set permissions recursively for all directories in the path
+        for root, dirs, files in os.walk(folder_path):
+            os.chmod(root, 0o777)
+
+        # Move the file to the folder
+        file_name = os.path.basename(path)
+        destination = os.path.join(folder_path, file_name)
+        shutil.move(path, destination)
+
+        return destination
+
+    async def organize_fileOLD(self, file_path: Path, media_type: str) -> Path:
         """Move file to organized directory structure"""
         dest_dir = (
             self.config.paths.image_dest
@@ -26,7 +93,13 @@ class FileManager:
         new_path = dest_dir / f"{creation_time:%Y/%m}" / file_path.name
 
         new_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Set full permissions for the folder
+        os.chmod(new_path.parent, 0o777)
         shutil.move(str(file_path), str(new_path))
+        # Set full permissions for the file
+        os.chmod(new_path, 0o777)
+
         self.logger.debug(f"Moved {file_path} to {new_path}")
         return new_path
 
@@ -65,11 +138,6 @@ class FileManager:
             img, (target_width, target_height), interpolation=cv2.INTER_LANCZOS4
         )
         resized_height, resized_width = img_resized.shape[:2]
-
-        # cv2.imwrite(
-        #     str(os.path.dirname(os.path.abspath(image_path))) + "/out.jpg", img_resized
-        # )
-        # print(str(os.path.dirname(os.path.abspath(image_path))) + "/out.jpg")
 
         # Encode the resized image as a JPEG bytes object
         encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 90]

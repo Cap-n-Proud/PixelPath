@@ -1,4 +1,5 @@
-# cd /mnt/Software/200-Apps/media_workflow/
+# main.py
+#  cd /mnt/Software/200-Apps/media_workflow/
 # source venv/bin/activate
 from config import (
     AppConfig,
@@ -74,7 +75,7 @@ config = AppConfig(
     ),
     paths=PathConfig(
         # watch_dir=Path("/mnt/Photos/001-Process/IN/"),
-        watch_dir=Path("/mnt/Photos/005-PhotoBook/2008/"),
+        watch_dir=Path("/mnt/Photos/000-InstantUpload/"),
         # image_dest=Path("/mnt/Photos/001-Process/OUT/"),
         image_dest=Path("/mnt/Photos/005-PhotoBook/"),
         video_dest=Path("/mnt/Photos/010-Videos/"),
@@ -103,17 +104,17 @@ config = AppConfig(
         #     write_metadata=True,
         #     move_processed_media=True,
         images=ImageWorkflowConfig(
-            enable_geotagging=False,
-            enable_face_recognition=False,
+            enable_geotagging=True,
+            enable_face_recognition=True,
             enable_object_detection=False,
-            enable_color_analysis=False,
+            enable_color_analysis=True,
             enable_captioning=False,
-            enable_description=False,
-            enable_tagging=False,
+            enable_description=True,
+            enable_tagging=True,
             enable_ocr=True,
             enable_rating=False,
             write_metadata=True,
-            move_processed_media=False,
+            move_processed_media=True,
         ),
         videos=VideoWorkflowConfig(
             move_processed_media=False,
