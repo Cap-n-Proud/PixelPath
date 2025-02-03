@@ -5,7 +5,7 @@
 
 # Image tagging via Clarifai => OK
 # AI caption generation
-# OCR processing
+# OCR processing => OK
 # object:https://replicate.com/cudanexus/detic?prediction=v9wwtxn4vhrme0cmqhrsgk1764
 # Face recognition/classification => OK
 # Color analysis => OK
