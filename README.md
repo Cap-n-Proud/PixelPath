@@ -1,8 +1,7 @@
-# Media Processing Pipeline
+# PixelPath - Media Processing Pipeline
 
 Automated workflow for photo and video processing with AI-powered tagging, captioning, OCR, and metadata management.
 
-![Workflow Diagram](docs/workflow.png)
 
 ## Features
 
@@ -13,8 +12,9 @@ Automated workflow for photo and video processing with AI-powered tagging, capti
   - Reverse geocoding (OpenCage)
   - Color palette extraction
   - EXIF/IPTC metadata handling
+  - Automatic picture ranking (future)
 
-- **Video Processing**  
+- **Video Processing**  (future)
   - Scene detection & keyframe extraction
   - Audio transcription (Whisper)
   - Object detection in video frames
