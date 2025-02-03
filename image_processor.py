@@ -40,8 +40,6 @@ from clarifai_grpc.grpc.api.status import status_code_pb2
 import logging
 from log_service import setup_logging
 from paddleocr import PaddleOCR
-
-
 from libs.color_service import color_names_rgb, _create_color_mapping
 
 
@@ -70,6 +68,11 @@ class ImageProcessor:
             self.ocr = PaddleOCR(
                 use_angle_cls=True, lang="en", use_gpu=False
             )  # Force CPU
+
+        if self.config.workflow.images.enable_face_recognition:
+            # Initialize PaddleOCR with English language support and angle classification
+            self.classifier = self._get_face_classifier()
+
         self.logger.info(
             "Image Processor initialized with configuration: %s", self.config
         )
@@ -314,8 +317,8 @@ class ImageProcessor:
     async def _classify_faces(self, image_path: Path) -> List[str]:
         """Face recognition and classification"""
         try:
-            # Load or train classifier
-            classifier = await self._get_face_classifier()
+            # Load or train classifier. MOved to the init of the module so it is loaded only once
+            # classifier = await self._get_face_classifier()
 
             # Process image
             image = face_recognition.load_image_file(image_path)
