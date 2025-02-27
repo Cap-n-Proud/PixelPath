@@ -1,4 +1,7 @@
-# media_workflow/api_client.py
+# api_client.py
+# The `APIClient` class provides an asynchronous HTTP client for interacting with external APIs.
+# It handles POST and GET requests, processes responses, and includes logging functionality.
+
 import httpx
 import logging
 from typing import Optional, Any

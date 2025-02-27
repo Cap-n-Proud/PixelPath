@@ -1,198 +1,286 @@
-Here's the user manual in Markdown syntax:
 
-```markdown
 # Image Processor User Manual
 
-## Overview
-
-The `ImageProcessor` module is responsible for handling various image-processing tasks, including:
-
-- **Image Tagging** (via Clarifai API)
-- **AI Caption Generation**
-- **OCR Processing** (via PaddleOCR)
-- **Object Detection**
-- **Face Recognition & Classification**
-- **Color Analysis**
-- **GPS Reverse Geocoding**
-- **Metadata Writing** (via ExifTool)
-
-This module is designed to work asynchronously and integrates with multiple services to extract useful metadata from images.
+## Table of Contents
+1. **Introduction**
+2. **Initialization**
+3. **Main Processing Pipeline**
+4. **Image Tagging**
+5. **OCR Processing**
+6. **Face Recognition & Classification**
+7. **Color Analysis**
+8. **Geotagging**
+9. **Metadata Writing**
+10. **Helper Methods**
 
 ---
 
-## Installation & Dependencies
+## 1. Introduction
 
-Before using this module, ensure the following dependencies are installed:
+The `ImageProcessor` class is designed to handle a variety of image processing tasks, including tagging, OCR, face recognition, color analysis, and geolocation tagging. It leverages external APIs and libraries to perform these operations efficiently.
 
-```bash
-pip install numpy face_recognition pillow scikit-learn pickle-mixin paddleocr requests
-```
-
-Also, ensure external services such as **Clarifai API**, **Replicate AI**, and **Reverse Geocoding API** have valid API keys set in the configuration.
-
----
-
-## Configuration
-
-The `ImageProcessor` relies on a structured configuration file. Relevant settings include:
-
-```yaml
-workflow:
-  images:
-    enable_tagging: true
-    enable_geotagging: true
-    enable_description: true
-    enable_color_analysis: true
-    enable_face_recognition: true
-    enable_ocr: true
-    write_metadata: true
-    move_processed_media: true
-
-api:
-  CLARIFAI_API_KEY: "your_clarifai_api_key"
-  REVERSE_GEO_API_KEY: "your_reverse_geo_api_key"
-  caption_url: "https://api.example.com/caption"
-```
+**Key Features:**
+- Image Tagging using Clarifai API
+- OCR (Optical Character Recognition) with PaddleOCR
+- Face Recognition & Classification
+- Color Analysis using K-means clustering
+- Geotagging via Reverse Geocoding API
 
 ---
 
-## Usage
+## 2. Initialization
 
-### Initializing the `ImageProcessor`
-
-To use this module, initialize an instance of `ImageProcessor` with the required dependencies:
+The `ImageProcessor` requires the following dependencies:
 
 ```python
-from metadata_service import MetadataService
-from api_client import APIClient
-from file_manager import FileManager
-
-config = load_config()  # Load your configuration
-metadata = MetadataService(config)
-api = APIClient(config)
-file_manager = FileManager(config)
-
-image_processor = ImageProcessor(config, metadata, api, file_manager)
+def __init__(self, config, metadata: MetadataService, api: APIClient, file_manager: FileManager):
+    ...
 ```
 
-### Processing an Image
+### Parameters:
+- **config**: Configuration settings for the image processing workflow.
+- **metadata**: Instance of `MetadataService` for handling metadata operations.
+- **api**: Instance of `APIClient` for interacting with external APIs.
+- **file_manager**: Instance of `FileManager` for file organization and management.
 
-To process an image, call:
+**Notes:**
+- The class initializes logging and sets up necessary configurations.
+- If OCR is enabled, it initializes the PaddleOCR engine.
+- If face recognition is enabled, it loads or trains a face classifier model.
+
+---
+
+## 3. Main Processing Pipeline
+
+The `process()` method orchestrates all image processing steps based on configuration settings.
 
 ```python
-import asyncio
-from pathlib import Path
-
-image_path = Path("example.jpg")
-results = asyncio.run(image_processor.process(image_path))
-
-print(results)
+async def process(self, image_path: Path) -> Dict:
+    ...
 ```
 
-The `process()` method will:
+### Parameters:
+- **image_path**: Path to the input image file.
 
-1. Extract metadata and GPS info (if enabled).
-2. Generate tags, captions, and descriptions.
-3. Perform OCR to detect text in images.
-4. Identify and classify faces.
-5. Analyze dominant colors.
-6. Write metadata back to the image.
-7. Move the processed image to a structured location (if enabled).
+### Returns:
+- A dictionary containing results from various processing tasks (e.g., tags, OCR text, face classifications).
 
----
+### Workflow:
+1. Starts a timer to measure processing time.
+2. Logs the start of processing for the given image.
+3. Runs enabled processing steps in sequence:
+   - Image Tagging
+   - Geotagging
+   - Description Generation
+   - Color Analysis
+   - Face Recognition
+   - OCR
+4. Writes processed results to metadata if configured.
+5. Moves the processed file using `FileManager` if configured.
 
-## Features & API Details
-
-### Image Tagging
-
-**Method:** `async def _get_image_tags(self, image_path: Path) -> List[str]`
-
-- Uses the **Clarifai API** to generate image tags.
-- Requires `CLARIFAI_API_KEY` in the configuration.
-
-### AI Caption Generation
-
-**Method:** `async def _generate_caption(self, image_path: Path) -> Optional[str]`
-
-- Uses an AI-based caption generation model.
-- Requires an external API (`caption_url`).
-
-### OCR Processing
-
-**Method:** `async def _process_ocr(self, image_path: Path) -> List[str]`
-
-- Uses **PaddleOCR** to extract text from images.
-- Returns detected text as a list of words.
-- Confidence filtering is applied.
-
-### Face Recognition & Classification
-
-**Method:** `async def _classify_faces(self, image_path: Path) -> List[str]`
-
-- Detects and classifies faces using **face_recognition** and **scikit-learn SVM**.
-- If no trained classifier exists, a new model is trained.
-
-### Color Analysis
-
-**Method:** `async def _process_analyze_colors(self, image_path: Path) -> List[str]`
-
-- Uses **K-Means clustering** to detect dominant colors.
-- Maps detected colors to human-readable names.
-
-### GPS Reverse Geocoding
-
-**Method:** `async def _process_geotagging(self, image_path: Path) -> Dict`
-
-- Extracts GPS coordinates from image metadata.
-- Queries an external geocoding API to retrieve location data.
-
-### Metadata Writing
-
-**Method:** `async def write_metadata(self, image_path: Path, metadata: Dict, media_type: str)`
-
-- Uses **ExifTool** to write extracted metadata back to the image.
+**Notes:**
+- Processing steps are conditional based on configuration settings (`config.workflow.images.*`).
+- Results from each step are collected in a dictionary and returned at the end.
 
 ---
 
-## Logging & Debugging
+## 4. Image Tagging
 
-- Logging is configured via `setup_logging(config)`.
-- Use `self.logger.debug()` for detailed debug information.
-- Logs can be found in the configured log directory.
+The `_get_image_tags()` method generates tags for an image using the Clarifai API.
 
----
-
-## Troubleshooting
-
-1. **Clarifai API errors**
-   - Ensure `CLARIFAI_API_KEY` is correct.
-   - Check if the API service is active.
-
-2. **OCR not detecting text**
-   - Increase `ocr_confidence` threshold in config.
-   - Ensure PaddleOCR is correctly installed.
-
-3. **Face recognition issues**
-   - If classifier is missing, it will be retrained.
-   - Ensure training images are properly labeled.
-
-4. **Geolocation errors**
-   - Check if GPS data is present in the image.
-   - Ensure `REVERSE_GEO_API_KEY` is valid.
-
----
-
-## Future Improvements
-
-- **Object detection**: Integration with Detic for advanced object recognition.
-- **Better AI captions**: Improve caption generation using multimodal AI models.
-- **Cloud integration**: Support for cloud storage and remote processing.
-
----
-
-## Conclusion
-
-This module provides an automated pipeline for extracting useful insights from images. By leveraging AI, OCR, and metadata processing, it enhances image classification, tagging, and organization in a structured workflow.
+```python
+async def _get_image_tags(self, image_path: Path) -> List[str]:
+    ...
 ```
 
-This should provide a comprehensive guide for maintaining and extending the module. Let me know if you need any adjustments! 🚀
+### Parameters:
+- **image_path**: Path to the input image file.
+
+### Returns:
+- A list of tags generated by Clarifai API.
+
+### Process:
+1. Resizes the image to a maximum width of 1920px.
+2. Sends the resized image to Clarifai for tagging.
+3. Extracts and returns up to 50 concepts (tags) with a minimum confidence score of 0.5.
+
+**Notes:**
+- Requires a valid Clarifai API key and app ID.
+- The number of tags can be controlled via configuration settings.
+
+---
+
+## 5. OCR Processing
+
+The `_process_ocr()` method performs OCR on the image to extract text.
+
+```python
+async def _process_ocr(self, image_path: Path) -> List[str]:
+    ...
+```
+
+### Parameters:
+- **image_path**: Path to the input image file.
+
+### Returns:
+- A list containing extracted OCR text fragments.
+
+### Process:
+1. Uses PaddleOCR to detect and recognize text in the image.
+2. Filters out text fragments with confidence below a specified threshold.
+3. Joins the remaining text fragments into a single string.
+
+**Notes:**
+- Requires OCR functionality to be enabled in configuration.
+- The OCR engine runs on CPU by default but can be configured for GPU usage.
+
+---
+
+## 6. Face Recognition & Classification
+
+The `_classify_faces()` method identifies and classifies faces in an image.
+
+```python
+async def _classify_faces(self, image_path: Path) -> List[str]:
+    ...
+```
+
+### Parameters:
+- **image_path**: Path to the input image file.
+
+### Returns:
+- A list of face classifications (names or labels).
+
+### Process:
+1. Loads or trains a face classifier based on known faces.
+2. Detects faces in the image using `face_recognition`.
+3. Classifies each detected face and returns unique classifications.
+
+**Notes:**
+- The face classifier is loaded once during initialization.
+- Face recognition requires a trained model, which can be generated using `_train_face_classifier()`.
+
+---
+
+## 7. Color Analysis
+
+The `_process_analyze_colors()` method identifies dominant colors in an image.
+
+```python
+async def _process_analyze_colors(self, image_path: Path) -> List[str]:
+    ...
+```
+
+### Parameters:
+- **image_path**: Path to the input image file.
+
+### Returns:
+- A list of color names representing dominant colors in the image.
+
+### Process:
+1. Resizes the image to a maximum width of 1920px.
+2. Converts the image into an array of pixel colors.
+3. Applies K-means clustering to identify dominant colors.
+4. Maps each dominant color to its closest named color.
+
+**Notes:**
+- Uses `KMeans` from scikit-learn for clustering.
+- The number of dominant colors can be adjusted via configuration.
+
+---
+
+## 8. Geotagging
+
+The `_process_geotagging()` method performs reverse geocoding based on GPS data embedded in the image.
+
+```python
+async def _process_geotagging(self, image_path: Path) -> Dict:
+    ...
+```
+
+### Parameters:
+- **image_path**: Path to the input image file.
+
+### Returns:
+- A dictionary containing geolocation components (e.g., city, country).
+
+### Process:
+1. Extracts GPS coordinates from the image's metadata.
+2. Sends these coordinates to a reverse geocoding API.
+3. Returns structured location data.
+
+**Notes:**
+- Requires valid GPS data in the image file.
+- The geocoding service requires an API key.
+
+---
+
+## 9. Metadata Writing
+
+The `process()` method writes processed results back to the image's metadata if enabled.
+
+### Configuration:
+```python
+if self.config.workflow.images.write_metadata and len(results):
+    await self.metadata.write_metadata(image_path, results, "image")
+```
+
+**Notes:**
+- The `write_metadata` method is part of the `MetadataService`.
+- Ensure metadata operations are properly configured in your settings.
+
+---
+
+## 10. Helper Methods
+
+### `_train_face_classifier()`
+Trains a new face classifier using known faces from a specified directory.
+
+```python
+async def _train_face_classifier(self):
+    ...
+```
+
+**Parameters:**
+- None (uses configuration to locate known faces).
+
+**Process:**
+1. Loads images of known faces.
+2. Extracts face encodings and trains an SVM classifier.
+3. Saves the trained model for future use.
+
+### `closest_color()`
+Finds the closest named color to a given RGB value.
+
+```python
+async def closest_color(self, rgb: np.ndarray) -> str:
+    ...
+```
+
+**Parameters:**
+- **rgb**: An array representing an RGB color.
+
+**Returns:**
+- The name of the closest matching color from a predefined list.
+
+---
+
+## Notes for Users
+
+1. **Configuration**:
+   - Ensure all necessary configuration settings are properly set before initializing `ImageProcessor`.
+   - Check paths to known faces, face classifiers, and other dependencies.
+
+2. **Dependencies**:
+   - External libraries like `PaddleOCR`, `face_recognition`, and `scikit-learn` must be installed.
+   - Required APIs (Clarifai, Reverse Geocoding) need valid API keys.
+
+3. **Performance**:
+   - Image resizing helps maintain consistent processing speeds.
+   - Some operations may take longer depending on image size and complexity.
+
+4. **Error Handling**:
+   - Methods log errors and return empty results or placeholders when failures occur.
+   - Monitor logs for detailed error messages and debugging information.
+
+---

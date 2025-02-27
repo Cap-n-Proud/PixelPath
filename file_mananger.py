@@ -74,11 +74,14 @@ class FileManager:
         for root, dirs, files in os.walk(folder_path):
             os.chmod(root, 0o777)
 
-        # Move the file to the folder
+        # Move the file to the folder only if there is no existing file with the same name
         file_name = os.path.basename(path)
         destination = os.path.join(folder_path, file_name)
-        shutil.move(path, destination)
-
+        if not os.path.exists(destination):
+            shutil.move(path, destination)
+            self.logger.info(f"Moved {path} to {destination}")
+        else:
+            self.logger.warning(f"File not moved: Destination {destination} already exists.")
         return destination
 
     async def organize_fileOLD(self, file_path: Path, media_type: str) -> Path:

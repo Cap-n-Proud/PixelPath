@@ -1,4 +1,15 @@
-# media_workflow/image_processor.py
+# image_processor.py
+# The `ImageProcessor` class is designed to handle a variety of image processing tasks, including tagging, OCR, face recognition, color analysis, and geolocation tagging. It leverages external APIs and libraries to perform these operations efficiently.
+
+# **Key Features:**
+# - Image Tagging using Clarifai API
+# - OCR (Optical Character Recognition) with PaddleOCR
+# - Face Recognition & Classification
+# - Color Analysis using K-means clustering
+# - Geotagging via Reverse Geocoding API
+
+
+
 
 # https://images.squarespace-cdn.com/content/v1/523c7f80e4b032ff8b3b0a97/1440518068126-5STUUQWOW8OKKVENBNJ2/citysign_001_2.jpg
 # https://media.gettyimages.com/id/482804533/photo/fabulous-las-vegas-sign.jpg?s=612x612&w=0&k=20&c=7Aljht_9lgSgmPmhUFv3PPUDVnbgH01Ipjf3pH78ybs=
@@ -125,11 +136,13 @@ class ImageProcessor:
                 results["ocr"] = await self._process_ocr(image_path)
                 self.logger.info(f"OCR: {results['ocr']}")
 
+            # if self.config.processing.rate_image:
+            #     results["rate"] = await self._rate_image(image_path)
+
             # Write metadata
             if self.config.workflow.images.write_metadata and len(results):
-                self.logger.info(f"Writing metafata (write_metadata)")
+                self.logger.info(f"Writing metadta (write_metadata)")
                 await self.metadata.write_metadata(image_path, results, "image")
-            self.logger.info(f"Resuts: {results}")
             if (
                 self.config.workflow.images.move_processed_media
                 or self.config.workflow.videos.move_processed_media
@@ -139,7 +152,7 @@ class ImageProcessor:
                 self.logger.info(f"File moved to: '{destination}'")
 
         except Exception as e:
-            self.logger.error(f"Image processing failed for {image_path}: {str(e)}")
+            self.logger.error(f"Image processing failed for: {image_path}: {str(e)}")
             return {}
         # Stop timing after processing
         timer.stop()
