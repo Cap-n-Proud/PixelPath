@@ -1,4 +1,12 @@
-# media_workflow/utils/logging.py
+# logging.py
+## 1. Introduction
+
+# The `logging.py` file provides utilities for setting up logging in your application. It simplifies the process of configuring both file and console logging based on a provided configuration object.
+
+# **Purpose:**
+# - Configure root logger with specified settings.
+# - Set log levels for different modules to control verbosity.
+# - Format logs consistently for better readability.
 import logging
 from pathlib import Path
 from config import AppConfig
