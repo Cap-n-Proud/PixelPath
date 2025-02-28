@@ -1,4 +1,3 @@
-# media_workflow/file_manager.py
 import shutil
 import os
 from pathlib import Path
@@ -8,107 +7,221 @@ from datetime import datetime  # Correct import for datetime
 import cv2
 import subprocess
 import json
+from typing import Set, Optional
 
 
 class FileManager:
     def __init__(self, config):
         self.config = config
         self.logger = logging.getLogger(__name__)
-        self.processed_files: Set[str] = set()
+        self.processed_files: set[str] = set()
+        # setup_logging(config)  # Ensure logging is configured
 
-    async def organize_file(self, path):
-        baseDest = self.config.paths.image_dest
-        # Get the file's creation and modification times
-        path = str(path)
-        if path.lower().endswith(self.config.image_extensions):
-            metadata_cmd = ["exiftool", "-json", path]
-            metadata = json.loads(subprocess.check_output(metadata_cmd))
-            created_time = metadata[0].get("DateTimeOriginal")
-        elif path.lower().endswith(self.config.video_extensions):
-            metadata_cmd = [
-                "ffprobe",
-                "-v",
-                "quiet",
-                "-print_format",
-                "json",
-                "-show_format",
-                "-show_streams",
-                path,
-            ]
-            metadata = json.loads(subprocess.check_output(metadata_cmd))
-            created_time = metadata["format"]["tags"].get("creation_time")
+    async def organize_file(
+        self,
+        path: str | Path,
+        conflict_resolution: str = "skip",
+        rename_suffix: str = "_{counter}",
+    ) -> str:
+        """
+        Organize a file into the destination directory based on its creation/modification time.
+
+        Args:
+            path (str | Path): Path to the file to organize.
+            conflict_resolution (str, optional):
+                Strategy for handling file name conflicts at destination.
+                Options: 'skip' (default), 'overwrite', 'rename'.
+            rename_suffix (str, optional):
+                Suffix to append when renaming files. Defaults to "_{counter}".
+
+        Returns:
+            str: The final path of the organized file or an error message.
+
+        Raises:
+            ValueError: If an invalid conflict_resolution strategy is provided.
+        """
+        if isinstance(path, str):
+            path = Path(path)
+
+        base_dest = self.config.paths.image_dest
+        destination_folder, file_name = await self._get_destination_info(
+            path, base_dest
+        )
+
+        # Create destination folder
+        os.makedirs(destination_folder, exist_ok=True)
+        self._set_directory_permissions(destination_folder)
+
+        # Handle file name conflicts based on strategy
+        final_path = Path(destination_folder) / file_name
+
+        if not final_path.exists():
+            self.logger.info(f"Moving '{path}' to '{final_path}'")
+            shutil.move(str(path), str(final_path))
+            return str(final_path)
+        else:
+            match conflict_resolution:
+                case "skip":
+                    self.logger.warning(
+                        f"Skipping file '{path}'. File already exists at '{final_path}'."
+                    )
+                    return f"File not moved: Destination {final_path} already exists."
+                case "overwrite":
+                    self.logger.info(f"Overwriting existing file at '{final_path}'")
+                    shutil.move(str(path), str(final_path))
+                    return str(final_path)
+                case "rename":
+                    new_name = await self._handle_rename(
+                        final_path, suffix=rename_suffix
+                    )
+                    if new_name:
+                        self.logger.info(
+                            f"Renaming '{path}' to '{new_name}' and moving."
+                        )
+                        shutil.move(str(path), str(new_name))
+                        return str(new_name)
+                    else:
+                        error_msg = (
+                            f"Failed to find a unique name for '{path}'. "
+                            "File not moved."
+                        )
+                        self.logger.error(error_msg)
+                        return error_msg
+                case _:
+                    raise ValueError(
+                        f"Invalid conflict_resolution strategy: {conflict_resolution}"
+                    )
+
+    async def _get_destination_info(
+        self, path: Path, base_dest: str
+    ) -> tuple[str, str]:
+        """Determine the destination folder and filename based on file creation/modification time."""
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"File '{path}' does not exist.")
+
+        # Determine file type-specific metadata
+        suffix = (
+            path.suffix.lower()
+        )  # Get the extension as a string and convert to lowercase
+
+        if suffix in self.config.image_extensions:
+            metadata = await self._get_image_metadata(str(path))
+            created_time = metadata.get("DateTimeOriginal", None)
+        elif suffix in self.config.video_extensions:
+            metadata = await self._get_video_metadata(str(path))
+            created_time = metadata.get("creation_time", None)
         else:
             created_time = os.path.getctime(path)
 
-        if created_time:
-            # Remove milliseconds from timestamp string
-            if isinstance(created_time, float):
-                timestamp_str = datetime.fromtimestamp(created_time).strftime(
-                    "%Y:%m:%d %H:%M:%S"
-                )
-            else:
-                timestamp_str = created_time.split(".")[0]
-            formats = ["%Y:%m:%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"]
-            for format_str in formats:
-                try:
-                    file_time = datetime.strptime(timestamp_str, format_str).timestamp()
-                    break
-                except ValueError:
-                    pass
+        # Handle creation time
+        if isinstance(created_time, float):
+            timestamp_str = datetime.fromtimestamp(created_time).strftime(
+                "%Y:%m:%d %H:%M:%S"
+            )
+        elif created_time and isinstance(created_time, str):
+            timestamp_str = created_time.split(".")[0]
         else:
-            # None of the formats matched, use modification time as fallback
-            file_time = os.path.getmtime(path)
+            timestamp_str = datetime.now().strftime("%Y:%m:%d %H:%M:%S")
 
-        # Convert the file time to a datetime object
-        file_date = datetime.fromtimestamp(file_time)
+        # Format the creation time to a usable datetime object
+        file_date = await self._parse_timestamp(timestamp_str)
 
-        # Create the folder path using the year and month of the file date
-        folder_path = os.path.join(
-            str(baseDest), str(file_date.year), str(file_date.month).zfill(2)
+        destination_folder = os.path.join(
+            base_dest, str(file_date.year), f"{file_date.month:02d}"
         )
 
-        # Create the folder if it doesn't exist
-        os.makedirs(folder_path, exist_ok=True)
+        return destination_folder, path.name
 
-        # Set permissions recursively for all directories in the path
-        for root, dirs, files in os.walk(folder_path):
-            os.chmod(root, 0o777)
+    async def _set_directory_permissions(self, directory_path: str) -> None:
+        """Set appropriate permissions for the target directory."""
+        # Ensure directory exists
+        os.makedirs(directory_path, exist_ok=True)
+        # Set read/write/execute for everyone
+        os.chmod(directory_path, 0o777)
 
-        # Move the file to the folder only if there is no existing file with the same name
-        file_name = os.path.basename(path)
-        destination = os.path.join(folder_path, file_name)
-        if not os.path.exists(destination):
-            shutil.move(path, destination)
-            self.logger.info(f"Moved {path} to {destination}")
-        else:
-            self.logger.warning(f"File not moved: Destination {destination} already exists.")
-        return destination
+    async def _get_image_metadata(self, path: str) -> dict:
+        """Extract metadata using exiftool for images."""
+        try:
+            result = subprocess.run(
+                ["exiftool", "-json", path],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            return json.loads(result.stdout)[0]
+        except Exception as e:
+            self.logger.error(f"Error extracting image metadata: {e}")
+            raise
 
-    async def organize_fileOLD(self, file_path: Path, media_type: str) -> Path:
-        """Move file to organized directory structure"""
-        dest_dir = (
-            self.config.paths.image_dest
-            if media_type == "image"
-            else self.config.paths.video_dest
+    async def _get_video_metadata(self, path: str) -> dict:
+        """Extract metadata using ffprobe for videos."""
+        try:
+            result = subprocess.run(
+                [
+                    "ffprobe",
+                    "-v",
+                    "quiet",
+                    "-print_format",
+                    "json",
+                    "-show_format",
+                    "-show_streams",
+                    path,
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            return json.loads(result.stdout)
+        except Exception as e:
+            self.logger.error(f"Error extracting video metadata: {e}")
+            raise
+
+    async def _parse_timestamp(self, timestamp_str: str) -> datetime:
+        """Convert a timestamp string to a datetime object."""
+        for format_str in ["%Y:%m:%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"]:
+            try:
+                return datetime.strptime(timestamp_str.strip(), format_str)
+            except ValueError:
+                pass
+        # If no valid format matches, use current time as fallback
+        self.logger.warning(
+            f"Failed to parse timestamp '{timestamp_str}'. Using current time."
         )
-
-        creation_time = self._get_creation_time(file_path, media_type)
-        new_path = dest_dir / f"{creation_time:%Y/%m}" / file_path.name
-
-        new_path.parent.mkdir(parents=True, exist_ok=True)
-
-        # Set full permissions for the folder
-        os.chmod(new_path.parent, 0o777)
-        shutil.move(str(file_path), str(new_path))
-        # Set full permissions for the file
-        os.chmod(new_path, 0o777)
-
-        self.logger.debug(f"Moved {file_path} to {new_path}")
-        return new_path
-
-    def _get_creation_time(self, file_path: Path, media_type: str) -> datetime:
-        # Implementation using exiftool/ffprobe
         return datetime.now()
+
+    async def _handle_rename(
+        self, existing_path: Path, suffix: str = "_{counter}"
+    ) -> Optional[Path]:
+        """
+        Handle file renaming when a file already exists at the destination.
+
+        Args:
+            existing_path (Path): The path that already exists.
+            suffix (str, optional): Suffix to append to create a unique name. Defaults to "_{counter}".
+
+        Returns:
+            Path | None: The new unique path if successfully renamed, otherwise None.
+        """
+        base_name = existing_path.stem
+        extension = existing_path.suffix
+
+        counter = 1
+        while True:
+            # Generate candidate name with suffix
+            candidate_stem = base_name + suffix.format(counter=counter)
+            candidate_path = existing_path.parent / f"{candidate_stem}{extension}"
+
+            if not candidate_path.exists():
+                return candidate_path
+            else:
+                counter += 1
+
+            # Prevent infinite loops by limiting attempts (optional)
+            if counter > 100:
+                self.logger.error(
+                    f"Failed to find a unique name for '{existing_path}'."
+                )
+                return None
 
     def create_temp_dir(self, prefix: str) -> Path:
         temp_dir = self.config.paths.ramdisk_dir / prefix

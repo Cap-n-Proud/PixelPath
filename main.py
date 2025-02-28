@@ -1,6 +1,7 @@
 # main.py
 #  cd /mnt/Software/200-Apps/media_workflow/
 # source venv/bin/activate
+
 from config import (
     AppConfig,
     ApiConfig,
@@ -89,32 +90,37 @@ config = AppConfig(
         temp_dir=Path("/tmp"),
         secrets_path=Path("/mnt/secrets/media_workflow/"),
     ),
-    processing=ProcessingConfig(min_file_age=60, simulate_processing=False),
+    processing=ProcessingConfig(
+        min_file_age=60,
+        simulate_processing=False,
+        conflict_resolution="overwrite",
+        rename_suffix="_{counter}",
+    ),
     workflow=WorkflowConfig(
-        # images=ImageWorkflowConfig(
-        #     enable_geotagging=True,
-        #     enable_face_recognition=True,
-        #     enable_object_detection=True,
-        #     enable_color_analysis=True,
-        #     enable_captioning=True,
-        #     enable_description=True,
-        #     enable_tagging=True,
-        #     enable_ocr=True,
-        #     enable_rating=True,
-        #     write_metadata=True,
-        #     move_processed_media=True,
         images=ImageWorkflowConfig(
             enable_geotagging=True,
             enable_face_recognition=True,
-            enable_object_detection=False,
+            enable_object_detection=True,
             enable_color_analysis=True,
-            enable_captioning=False,
+            enable_captioning=True,
             enable_description=True,
             enable_tagging=True,
             enable_ocr=True,
-            enable_rating=False,
+            enable_rating=True,
             write_metadata=True,
             move_processed_media=True,
+            # images=ImageWorkflowConfig(
+            #     enable_geotagging=True,
+            #     enable_face_recognition=True,
+            #     enable_object_detection=False,
+            #     enable_color_analysis=True,
+            #     enable_captioning=False,
+            #     enable_description=True,
+            #     enable_tagging=True,
+            #     enable_ocr=True,
+            #     enable_rating=False,
+            #     write_metadata=True,
+            #     move_processed_media=True,
         ),
         videos=VideoWorkflowConfig(
             move_processed_media=False,

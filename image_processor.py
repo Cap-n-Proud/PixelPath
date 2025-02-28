@@ -9,8 +9,6 @@
 # - Geotagging via Reverse Geocoding API
 
 
-
-
 # https://images.squarespace-cdn.com/content/v1/523c7f80e4b032ff8b3b0a97/1440518068126-5STUUQWOW8OKKVENBNJ2/citysign_001_2.jpg
 # https://media.gettyimages.com/id/482804533/photo/fabulous-las-vegas-sign.jpg?s=612x612&w=0&k=20&c=7Aljht_9lgSgmPmhUFv3PPUDVnbgH01Ipjf3pH78ybs=
 
@@ -148,7 +146,11 @@ class ImageProcessor:
                 or self.config.workflow.videos.move_processed_media
             ) and not self.config.processing.simulate_processing:
                 self.logger.info(f"Moving file (move_processed_media)")
-                destination = await self.file_manager.organize_file(image_path)
+                destination = await self.file_manager.organize_file(
+                    path=image_path,
+                    conflict_resolution=self.config.processing.conflict_resolution,
+                    rename_suffix=self.config.processing.rename_suffix,
+                )
                 self.logger.info(f"File moved to: '{destination}'")
 
         except Exception as e:
