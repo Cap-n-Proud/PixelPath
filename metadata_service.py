@@ -1,4 +1,9 @@
-# media_workflow/metadata_service.py
+# metadata_service.py
+
+# The `MetadataService` module provides functionality to interact with media file metadata using the ExifTool library. 
+# It supports reading, writing, and modifying metadata such as creation times, GPS coordinates, ratings, and other IPTC fields.
+
+
 import exiftool
 from pathlib import Path
 import logging

@@ -1,4 +1,7 @@
 # media_controller.py
+
+# The `MediaController` class serves as the central orchestrator for managing media files 
+# and coordinating their processing through various services and processors.
 import asyncio
 from pathlib import Path
 import time
